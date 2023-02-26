@@ -1,8 +1,3 @@
-# Pymunk for physics
-# PIL for image manipulation
-# Sockets for multiplayer
-# Perlin-noise for random worlds
-
 # Pygame template
 import pygame
 import random
@@ -13,6 +8,7 @@ WIN_WIDTH = 1280
 WIN_HEIGHT = 720
 TITLE = "Asteroid Shooter"
 FPS = 60
+DEBUG = True
 
 # Colors
 WHITE = (255, 255, 255)
@@ -52,6 +48,7 @@ class Ship(pygame.sprite.Sprite):
         self.duration = 300
         self.image = pygame.image.load('./graphics/ship.png').convert_alpha()
         self.rect = self.image.get_rect(center=(WIN_WIDTH/2, WIN_HEIGHT/2))
+        self.mask = pygame.mask.from_surface(self.image)
     
     def update(self):
         self.rect.center = pygame.mouse.get_pos()
@@ -72,6 +69,7 @@ class Laser(pygame.sprite.Sprite):
         self.image = pygame.image.load("./graphics/laser.png").convert_alpha()
         self.rect = self.image.get_rect(center=ship_center)
         self.speed = 300
+        self.mask = pygame.mask.from_surface(self.image)
     
     def update(self):
         self.rect.y -= self.speed * dt
@@ -81,18 +79,34 @@ class Laser(pygame.sprite.Sprite):
 
 # Meteor
 class Meteor(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, pos):
         super().__init__()
         self.image = pygame.image.load('./graphics/meteor.png').convert_alpha()
-        x_pos = random.randint(100, WIN_WIDTH - 100)
+        meteor_size = pygame.math.Vector2(self.image.get_size()) * random.uniform(0.5, 1.5)
+        self.orig_img = pygame.transform.scale(self.image, meteor_size)
+        self.image = self.orig_img
         self.direction = pygame.math.Vector2(random.uniform(-0.5, 0.5), 1)
-        self.rect = self.image.get_rect(midtop=(x_pos, -100))
-        self.speed = 300
+        self.rect = self.image.get_rect(midtop=pos)
+        self.speed = random.randint(200, 600)
+        self.mask = pygame.mask.from_surface(self.image)
+
+        # Rotation
+        self.rotation = 0
+        self.rotation_speed = random.randint(20, 50)
     
     def update(self):
         self.rect.midtop += self.direction * self.speed * dt
         if self.rect.top > WIN_HEIGHT:
             self.kill()
+        self.rotate()
+    
+    def rotate(self):
+        self.rotation += self.rotation_speed * dt
+        rotated_img = pygame.transform.rotozoom(self.orig_img, self.rotation, 1)
+        self.image = rotated_img
+        self.rect = self.image.get_rect(midtop=self.rect.midtop)
+        self.mask = pygame.mask.from_surface(self.image)
+
 
 
 # Score Text
@@ -113,7 +127,8 @@ class ScoreText(pygame.sprite.Sprite):
 
 
 def spawn_meteor():
-    meteor = Meteor()
+    x_pos = random.randint(100, WIN_WIDTH - 100)
+    meteor = Meteor(pos=(x_pos, -100))
     meteor_sprites.add(meteor)
 
 
@@ -134,7 +149,7 @@ while running:
 
     # Process input (events)
     for event in pygame.event.get():
-        if event.type == pygame.QUIT:
+        if event.type == pygame.QUIT:  
             running = False
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
@@ -151,11 +166,11 @@ while running:
 
     # Collisions
     # Ship and Meteors
-    if pygame.sprite.spritecollide(ship, meteor_sprites, False):
+    if pygame.sprite.spritecollide(ship, meteor_sprites, False, pygame.sprite.collide_mask):
         running = False
 
     # Meteors and lasers    
-    if pygame.sprite.groupcollide(meteor_sprites, laser_sprites, True, True):
+    if pygame.sprite.groupcollide(meteor_sprites, laser_sprites, True, True, pygame.sprite.collide_mask):
         explosion_sound.play()
 
 
@@ -166,8 +181,17 @@ while running:
     meteor_sprites.draw(screen)
     ship_sprite.draw(screen)
 
-    # Draw rectangle
+    # Draw rectangle on score
     pygame.draw.rect(screen, WHITE, score.rect.inflate(20, 20), 2, 2)
+
+    # Debug
+    if DEBUG:
+        pygame.draw.rect(screen, 'red', ship.rect, 2)
+        for sprite in meteor_sprites:
+            pygame.draw.rect(screen, 'red', sprite.rect, 2)
+        for sprite_rect in laser_sprites:
+            pygame.draw.rect(screen, 'red', sprite_rect, 2)
+        
     
     
     # *after* drawing everything flip the display
